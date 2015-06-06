@@ -1,7 +1,11 @@
 #include <TinyGPS.h>
+
+#include <SD.h>
+
+
 #include <SoftwareSerial.h>
 #include <LiquidCrystal.h>
-#include <SD.h>
+
 #include <SPI.h>
 
 #define BPEN 17
@@ -11,6 +15,7 @@
 LiquidCrystal lcd(4, 5, 6, 7, 8, 9); //Définition de l'écran lcd
 TinyGPS gps; //Définition de l'objet GPS
 File myFile; //Définition du fichier
+File theFile; //fichier SD
 SoftwareSerial uart_gps(3,2); //Définition du module GPS
 
 //Nous utiliserons des variables globales...
@@ -69,6 +74,7 @@ void GPSreader(){ //Récupère les données GPS et les stocke dans des variables
   return;
 }
 
+
 void affichage(){
   //affichage ecran
   lcd.clear();
@@ -85,6 +91,46 @@ void affichage(){
   
 }
 
+void accSD(){
+  if (!SD.begin(4)) {
+      Serial.println("Erreur à l'init!");
+      return;
+  }
+  Serial.println("init Ok.");
+}
+
+void ecritureSD(){
+ 
+  theFile = SD.open("fichier.txt", FILE_WRITE); // ouverture de fichier.txt en écriture
+  
+  if (theFile) {
+      Serial.print("Ecriture de données sur la premiere ligne");
+      theFile.println(", fin de la ligne et passage a la ligne suivante");
+   // Fermeture du fichier:
+      theFile.close();
+      Serial.println("C'est écrit !");
+    } else {
+      // impossible d'ouvrir/créer le fichier:
+      Serial.println("Erreur d'ouverture de fichier.txt");
+  }
+}
+
+void lectureSD(){
+  theFile = SD.open("fichier.txt");
+  if (theFile) {
+    Serial.println("fichier.txt:");
+    // lecture du fichier jusqu'à la fin:
+    while (theFile.available()) {
+    Serial.write(theFile.read());
+  }
+  // Fermeture du fichier:
+  theFile.close();
+  } 
+  else {
+  // Ouverture impossible:
+  Serial.println("Ouverture impossible de fichier.txt");
+  }
+}
 
 boolean feedgps(){ //Vérifie l'arrivée et l'encodage des données GPS
   while (uart_gps.available()){

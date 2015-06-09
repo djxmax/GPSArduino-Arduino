@@ -24,12 +24,20 @@ File theFile; //fichier SD
 SoftwareSerial uart_gps(3,2); //Définition du module GPS
 
 //Nous utiliserons des variables globales...
-float lat,lon;
-unsigned long time, date, id;
-int BPENState, BP1State, BP0State, type, choixAffichage, etat;
+float lat,lon, height;
+char * point="";
+unsigned long time, date;
+int BPENState, BP1State, BP0State, choixAffichage;
 boolean newdata = false;
+boolean enregistrement = false ;
+boolean etatMenu=false;
 
-boolean feedgps();
+
+boolean feedgps(); //Vérifie l'arrivée et l'encodage des données GPS
+void selectButton(); //Permet à l'utilisateur d'interagir avec les boutons du boitier
+void GPSreader(); //Récupère les données GPS et les stocke dans des variables
+void affichageGPS(); //Affiche à l'écran les données GPS en temps réel
+void affichEcran(char *,char *);
 
 void setup(){
     
@@ -46,17 +54,25 @@ void setup(){
   BPENState = 0;
   BP1State = 0;
   BP0State = 0;
-  choixAffichage = 0;
+  choixAffichage=0;
+  
+  //Affichage de la batterie sur le lcd au démarrage
+  lcd.begin(8,2);
+  lcd.setCursor(0,1);
+  lcd.print("Bat= ");
+  int valbat = analogRead(0); //récupération de la valeur de la batterie (analogique) sur la broche 0
+  float V = (float) valbat * 6.2 / 1024.0; //conversion analogique/numérique
+  lcd.print(V,4); 
+  delay(4000);
+  
   newdata = false;
-  etat = 0;
-  id = 0;
   
   pinMode(10, OUTPUT); 
-  if (!SD.begin(10)) {
-      Serial.println("Erreur à l'init!");
+  if (!SD.begin(4)) {
+      affichEcran(" ERROR","INIT SD");
       return;
   }else {
-  Serial.println("init Ok.");
+  Serial.println("INIT OK");
   
   //----- affiche le contenu du répertoire 
 
@@ -69,15 +85,16 @@ void setup(){
  
   
   //Creation du fichier .txt
-  //theFile = SD.open("fichier.txt", FILE_WRITE);
-  //theFile.close(); //Le fichier doit être fermé après sa création
+  theFile = SD.open("point.txt", FILE_WRITE);
+  theFile.close(); //Le fichier doit être fermé après sa création
   
   lcd.begin(8,2);
   lcd.clear();  
   lcd.setCursor(0,0);
-  lcd.print("Choisir");
+  lcd.print("Make a");
   lcd.setCursor(0,1);
-  lcd.print("bouton..");  
+  lcd.print("choice..");
+  delay(2000);
   
   //ecritureSD();
   //lectureSD();
@@ -86,7 +103,7 @@ void setup(){
 void loop(){
   
   selectButton();
-  //GPSreader();
+  GPSreader();
 
 }
 
@@ -99,37 +116,87 @@ void selectButton(){
   delay(100);
   //Les delay permettent de récupérer les valeurs lors d'une même action, il n'y a pas de risque de retard d'un des signaux
   
-  if(BPENState == HIGH && BP1State == LOW && BP0State == LOW){ //Bouton 1
+  if(BPENState == HIGH && BP1State == LOW && BP0State == LOW){ 
+  //Bouton 1 =>Enregistrement données 
   
       lcd.clear();
       lcd.setCursor(0,0);
       lcd.print("OK");
       lcd.setCursor(0,1);
       lcd.print("1");
+                  
+      if(enregistrement==false){
+        enregistrement=true;
+        affichEcran("  SAVE","   ON");
+        delay(1000);        
+        Serial.println("Début enregistrement ...\n"); //Premier flag de début pour l'app android
+      }else if (enregistrement==true){
+        enregistrement=false;
+        affichEcran("  SAVE","  OFF");
+        delay(1000);
+        Serial.println("Fin enregistrement\n"); // Dernier flag de fin pour l'app Android
+      }
   
-  }else if(BPENState == HIGH && BP1State == LOW && BP0State == HIGH) { //Bouton 2
-  
-      lcd.clear();
-      lcd.setCursor(0,0);
-      lcd.print("OK");
-      lcd.setCursor(0,1);
-      lcd.print("2");
-  
-  }else if (BPENState == HIGH && BP1State == HIGH && BP0State == LOW) { //Bouton 3
+  }else if(BPENState == HIGH && BP1State == LOW && BP0State == HIGH) { 
+  //Bouton 2 =>choix environnement ( arbre , batiment, lampadaire et Transport en commun ... )
       
-      lcd.clear();
-      lcd.setCursor(0,0);
-      lcd.print("OK");
-      lcd.setCursor(0,1);
-      lcd.print("3");
+      etatMenu=true;
+      lcd.clear(); // On réinitialise l'écran
+      
+      while(etatMenu==true){
+        
+        //Faire choix boutons multi
+        
+        lcd.setCursor(0,0);
+        lcd.print("1-A 2-Bt");
+        lcd.setCursor(0,1);
+        lcd.print("3-L 4-TC");
+        
+        delay(100);
+        BPENState = digitalRead(BPEN);
+        BP1State = digitalRead(BP1);
+        BP0State = digitalRead(BP0);
+        delay(100);
+        
+        if(BPENState == HIGH && BP1State == LOW && BP0State == LOW){
+          point=",Tree";
+          affichEcran("Choice :","  Tree");
+          etatMenu=false;
+        }else if(BPENState == HIGH && BP1State == LOW && BP0State == HIGH) {
+          point=",Buld";
+          affichEcran("Choice :","Building");         
+          etatMenu=false;
+        }else if (BPENState == HIGH && BP1State == HIGH && BP0State == LOW) {
+          point=",FLamp";
+          affichEcran("Choice :","Flo-lamp");          
+          etatMenu=false;
+        }else if (BPENState == HIGH && BP1State == HIGH && BP0State == HIGH) {
+          point=",PT";
+          affichEcran("Choice :","Public T");  
+          etatMenu=false;
+        }
+      }
+      
+      
   
-  }else if (BPENState == HIGH && BP1State == HIGH && BP0State == HIGH) { //Bouton 4
+  }else if (BPENState == HIGH && BP1State == HIGH && BP0State == LOW) { 
+  //Bouton 3 => BONUS
+      choixAffichage++;
+      typeAffichage();
+      if(choixAffichage==4){
+        choixAffichage=0;
+      }
+      
   
-      lcd.clear();
-      lcd.setCursor(0,0);
-      lcd.print("OK");
-      lcd.setCursor(0,1);
-      lcd.print("4");
+  }else if (BPENState == HIGH && BP1State == HIGH && BP0State == HIGH) { 
+  //Bouton 4 => Televerser
+      
+      if(enregistrement){
+        affichEcran("  SAVE","STILL ON");
+      }else{
+        affichEcran(" Upload","  Data");     
+        lectureSD();
+      }
   }
 }
 
@@ -142,13 +209,18 @@ void GPSreader(){ //Récupère les données GPS et les stocke dans des variables
   if (newdata){  //Si on a récupéré de nouvelles données...
     gps.f_get_position(&lat, &lon); //on enregistre les latitudes et longitudes   
     gps.get_datetime(&date, &time); //la date et l'heure d'enregistrement du point (format UTC)
+    height=gps.f_altitude(); //On enregistre l'altitude du point en mètres .
     
+    if(enregistrement){    
+    ecritureSD();        
+    }
     
+    //lectureSD();
     
-    ecritureSD();
+    if(etatMenu==false){
+    typeAffichage(); //Affichage sur l'écran lcd des coordonées GPS
+    }
     
-    affichage(); //Affichage sur l'écran lcd
-    id++; //Incrémentation de l'identifiant du point   
   }
   return;
 }
@@ -193,59 +265,99 @@ void afficheContenu(File dir, int numTabs) { // la fonctin reçoit le rép et le
 
 }
 
-void affichage(){
-  //affichage ecran
+void typeAffichage(){
+  
+  if(choixAffichage==0){
+  //affichage ecran coordonées GPS
   lcd.clear();
   lcd.setCursor(0,0); 
   lcd.print(lat,9); 
   lcd.setCursor(0,1); 
   lcd.print(lon,9);
+  // Permet de verifier coordonnées sur le port série
+  //  Serial.print(lat,DEC);
+  //  Serial.print(",");
+  //  Serial.print(lon,DEC);
+  //  Serial.print(";\n");
+  }else if (choixAffichage==1){
+  //affichage ecran altitude en mètres
+  lcd.clear();
+  lcd.setCursor(0,0); 
+  lcd.print("HEIGHT/m"); 
+  lcd.setCursor(0,1); 
+  lcd.print(height);
+  }else if (choixAffichage==2){
+  //affichage ecran date et heure au format UTC
+  lcd.clear();
+  lcd.setCursor(0,0); 
+  lcd.print(date); 
+  lcd.setCursor(0,1); 
+  lcd.print(time);
+  }else if (choixAffichage==3){
+  //affichage ecran batterie du module GPS
+  lcd.clear();  
+  lcd.setCursor(0,1);
+  lcd.print("Bat= ");
+  int valbat = analogRead(0); //récupération de la valeur de la batterie (analogique) sur la broche 0
+  float V = (float) valbat * 6.2 / 1024.0; //conversion analogique/numérique
+  lcd.print(V,4);    
+  }
   
-  //envoie serial
-  Serial.print(lat,DEC);
-  Serial.print(",");
-  Serial.print(lon,DEC);
-  Serial.print(";\n");
-  
+}
+
+void affichEcran(char * up, char * down){
+  //affichage ecran
+  lcd.clear();
+  lcd.setCursor(0,0); 
+  lcd.print(up); 
+  lcd.setCursor(0,1); 
+  lcd.print(down);
 }
 
 void ecritureSD(){
  
-  theFile = SD.open("test.txt", FILE_WRITE); // ouverture de fichier.txt en écriture
+  theFile = SD.open("point.txt", FILE_WRITE); // ouverture de fichier.txt en écriture
   
   if (theFile) {
-      Serial.print("Ecriture de données sur la premiere ligne");
+      
       theFile.print(lat);
       theFile.print(",");
       theFile.print(lon);
       theFile.print(",");
+      theFile.print(height);
+      theFile.print(",");
       theFile.print(date);
       theFile.print(",");
       theFile.print(time);
+      theFile.print(point);
+      theFile.print(";");
       theFile.print("\n");
-   // Fermeture du fichier:
+      
+      point=""; // On réinitialise le point .
+      // Fermeture du fichier:
       theFile.close();
-      Serial.println("C'est écrit !");
+      //Serial.println("C'est écrit !");
     } else {
       // impossible d'ouvrir/créer le fichier:
-      Serial.println("Erreur d'ouverture de fichier.txt");
+      Serial.println("Erreur d'ouverture du fichier");
   }
 }
 
 void lectureSD(){
-  theFile = SD.open("test.txt");
+  theFile = SD.open("point.txt");
   if (theFile) {
-    Serial.println("test.txt:");
+    Serial.print("Latitude,Longitude,Altitude,Date,Heure,Point;\n");
     // lecture du fichier jusqu'à la fin:
     while (theFile.available()) {
     Serial.write(theFile.read());
   }
   // Fermeture du fichier:
   theFile.close();
+  SD.remove("point.txt");
   } 
   else {
   // Ouverture impossible:
-  Serial.println("Ouverture impossible de fichier.txt");
+  affichEcran(" need a"," record");
   }
 }
 

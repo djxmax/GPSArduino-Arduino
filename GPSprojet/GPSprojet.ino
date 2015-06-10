@@ -1,13 +1,11 @@
+#include <EEPROMex.h>
+#include <EEPROMVar.h>
+
 #include <TinyGPS.h>
-
 #include <SD.h>
-
-
 #include <SoftwareSerial.h>
 #include <LiquidCrystal.h>
-
 #include <SPI.h>
-
 #define BPEN 17
 #define BP1 15
 #define BP0 16
@@ -24,18 +22,25 @@ File theFile; //fichier SD
 SoftwareSerial uart_gps(3,2); //Définition du module GPS
 
 //Nous utiliserons des variables globales...
-float lat,lon, height;
+float lat,lon,oldlat,oldlon,height,fkmph,dist,distCumul;
 char * point="";
 unsigned long time, date;
-int BPENState, BP1State, BP0State, choixAffichage;
+int BPENState, BP1State, BP0State, choixAffichage,testInit;
 boolean newdata = false;
 boolean enregistrement = false ;
 boolean etatMenu=false;
 
+int address =0 ;
 
+float output = 0;
+
+float readFloat(int address);
+bool writeFloat(int address, float value);
+bool updateFloat(int address, float value);
 boolean feedgps(); //Vérifie l'arrivée et l'encodage des données GPS
 void selectButton(); //Permet à l'utilisateur d'interagir avec les boutons du boitier
 void GPSreader(); //Récupère les données GPS et les stocke dans des variables
+float distance(); // Calcule la distance du parcours enregistré .
 void affichageGPS(); //Affiche à l'écran les données GPS en temps réel
 void affichEcran(char *,char *);
 
@@ -55,6 +60,15 @@ void setup(){
   BP1State = 0;
   BP0State = 0;
   choixAffichage=0;
+  distCumul=0;
+  testInit=0;
+  dist=0;
+  
+  output = EEPROM.readFloat(address);
+  Serial.print(output);
+  
+ 
+
   
   //Affichage de la batterie sur le lcd au démarrage
   lcd.begin(8,2);
@@ -103,7 +117,9 @@ void setup(){
 void loop(){
   
   selectButton();
-  GPSreader();
+  GPSreader();    
+
+
 
 }
 
@@ -148,7 +164,7 @@ void selectButton(){
         //Faire choix boutons multi
         
         lcd.setCursor(0,0);
-        lcd.print("1-A 2-Bt");
+        lcd.print("1-T 2-Bt");
         lcd.setCursor(0,1);
         lcd.print("3-L 4-TC");
         
@@ -159,19 +175,19 @@ void selectButton(){
         delay(100);
         
         if(BPENState == HIGH && BP1State == LOW && BP0State == LOW){
-          point=",Tree";
+          point="Tree";
           affichEcran("Choice :","  Tree");
           etatMenu=false;
         }else if(BPENState == HIGH && BP1State == LOW && BP0State == HIGH) {
-          point=",Buld";
+          point="Build";
           affichEcran("Choice :","Building");         
           etatMenu=false;
         }else if (BPENState == HIGH && BP1State == HIGH && BP0State == LOW) {
-          point=",FLamp";
+          point="FLamp";
           affichEcran("Choice :","Flo-lamp");          
           etatMenu=false;
         }else if (BPENState == HIGH && BP1State == HIGH && BP0State == HIGH) {
-          point=",PT";
+          point="PT";
           affichEcran("Choice :","Public T");  
           etatMenu=false;
         }
@@ -183,7 +199,7 @@ void selectButton(){
   //Bouton 3 => BONUS
       choixAffichage++;
       typeAffichage();
-      if(choixAffichage==4){
+      if(choixAffichage==5){
         choixAffichage=0;
       }
       
@@ -210,10 +226,36 @@ void GPSreader(){ //Récupère les données GPS et les stocke dans des variables
     gps.f_get_position(&lat, &lon); //on enregistre les latitudes et longitudes   
     gps.get_datetime(&date, &time); //la date et l'heure d'enregistrement du point (format UTC)
     height=gps.f_altitude(); //On enregistre l'altitude du point en mètres .
+    fkmph = gps.f_speed_kmph(); // Vitesse en Km/h .
     
-    if(enregistrement){    
-    ecritureSD();        
+    
+    if(testInit==0){
+    dist=0;
+    distCumul=0;
+    testInit=1;
+    }else{
+    dist = distance();
+    distCumul = distCumul + dist;  
     }
+    Serial.println(distCumul);
+    //On enregistre les lat/lon dans une autre variable pour calculer la distance avec le point précédent ultérieurement
+    oldlat=lat;
+    oldlon=lon;
+    
+  //EEPROM.updateFloat(address, distCumul);
+  //output = EEPROM.readFloat(address);
+  //Serial.print(address);
+  //Serial.print("\t");
+  //Serial.print(output);
+  //Serial.println();
+    
+    if(enregistrement){ 
+       
+    ecritureSD();
+    
+    }
+    
+    
     
     //lectureSD();
     
@@ -224,6 +266,25 @@ void GPSreader(){ //Récupère les données GPS et les stocke dans des variables
   }
   return;
 }
+
+float distance() { //Calcule la distance entre deux points successifs
+
+  Serial.println(oldlat);
+  Serial.println(oldlon);
+  //Conversion des lat/lon en radian
+  float latRad = lat * 0.017453293;
+  float lonRad = lon * 0.017453293;
+  float oldlatRad = oldlat * 0.017453293;
+  float oldlonRad = oldlon * 0.017453293;
+  
+  //Calculate the distance in KM
+  float latSin = sin((latRad - oldlatRad)/2);
+  float lonSin = sin((lonRad - oldlonRad)/2);
+  float distance = 2 * asin(sqrt((latSin*latSin) + cos(latRad) * cos(oldlatRad) * (lonSin * lonSin)));
+  distance = distance * 6371; //on multiplie par le rayon de la Terre
+  return distance*1000; //Retourne le résultat en mètres (d'où la multiplication par 1000)
+}
+
 
 void afficheContenu(File dir, int numTabs) { // la fonctin reçoit le rép et le décalage tab
 
@@ -294,6 +355,13 @@ void typeAffichage(){
   lcd.setCursor(0,1); 
   lcd.print(time);
   }else if (choixAffichage==3){
+  //affichage de la vitesse de déplacement
+  lcd.clear();
+  lcd.setCursor(0,0); 
+  lcd.print("SPEED :"); 
+  lcd.setCursor(0,1); 
+  lcd.print(fkmph);
+  }else if (choixAffichage==4){
   //affichage ecran batterie du module GPS
   lcd.clear();  
   lcd.setCursor(0,1);
@@ -329,11 +397,12 @@ void ecritureSD(){
       theFile.print(date);
       theFile.print(",");
       theFile.print(time);
+      theFile.print(",");
       theFile.print(point);
       theFile.print(";");
       theFile.print("\n");
       
-      point=""; // On réinitialise le point .
+      point="RAS"; // On réinitialise le point .
       // Fermeture du fichier:
       theFile.close();
       //Serial.println("C'est écrit !");
@@ -353,7 +422,8 @@ void lectureSD(){
   }
   // Fermeture du fichier:
   theFile.close();
-  SD.remove("point.txt");
+  //Suppression du fichier sur la carte SD
+  //SD.remove("point.txt");
   } 
   else {
   // Ouverture impossible:

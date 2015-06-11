@@ -64,8 +64,8 @@ void setup(){
   testInit=0;
   dist=0;
   
-  output = EEPROM.readFloat(address);
-  Serial.print(output);
+  //output = EEPROM.readFloat(address);
+  //Serial.print(output);
   
  
 
@@ -80,21 +80,22 @@ void setup(){
   delay(4000);
   
   newdata = false;
+  point="RAS";
   
   pinMode(10, OUTPUT); 
   if (!SD.begin(4)) {
       affichEcran(" ERROR","INIT SD");
       return;
   }else {
-  Serial.println("INIT OK");
+  //Serial.println("INIT OK");
   
   //----- affiche le contenu du répertoire 
 
-  myDir = SD.open("/"); // ouvre la SD Card à la racine
+  //myDir = SD.open("/"); // ouvre la SD Card à la racine
 
-  afficheContenu(myDir, 1); // affiche contenu d'un répertoire avec 0 tab 
+  //afficheContenu(myDir, 1); // affiche contenu d'un répertoire avec 0 tab 
 
-  Serial.println("Operation Terminee!");
+  //Serial.println("Operation Terminee!");
   }
  
   
@@ -105,9 +106,9 @@ void setup(){
   lcd.begin(8,2);
   lcd.clear();  
   lcd.setCursor(0,0);
-  lcd.print("Make a");
+  lcd.print("Waiting");
   lcd.setCursor(0,1);
-  lcd.print("choice..");
+  lcd.print("GPS...");
   delay(2000);
   
   //ecritureSD();
@@ -145,12 +146,10 @@ void selectButton(){
         enregistrement=true;
         affichEcran("  SAVE","   ON");
         delay(1000);        
-        Serial.println("Début enregistrement ...\n"); //Premier flag de début pour l'app android
       }else if (enregistrement==true){
         enregistrement=false;
         affichEcran("  SAVE","  OFF");
         delay(1000);
-        Serial.println("Fin enregistrement\n"); // Dernier flag de fin pour l'app Android
       }
   
   }else if(BPENState == HIGH && BP1State == LOW && BP0State == HIGH) { 
@@ -167,6 +166,7 @@ void selectButton(){
         lcd.print("1-T 2-Bt");
         lcd.setCursor(0,1);
         lcd.print("3-L 4-TC");
+        delay(1000);
         
         delay(100);
         BPENState = digitalRead(BPEN);
@@ -183,7 +183,7 @@ void selectButton(){
           affichEcran("Choice :","Building");         
           etatMenu=false;
         }else if (BPENState == HIGH && BP1State == HIGH && BP0State == LOW) {
-          point="FLamp";
+          point="Lamp";
           affichEcran("Choice :","Flo-lamp");          
           etatMenu=false;
         }else if (BPENState == HIGH && BP1State == HIGH && BP0State == HIGH) {
@@ -202,6 +202,7 @@ void selectButton(){
       if(choixAffichage==5){
         choixAffichage=0;
       }
+      delay(1000);
       
   
   }else if (BPENState == HIGH && BP1State == HIGH && BP0State == HIGH) { 
@@ -227,7 +228,7 @@ void GPSreader(){ //Récupère les données GPS et les stocke dans des variables
     gps.get_datetime(&date, &time); //la date et l'heure d'enregistrement du point (format UTC)
     height=gps.f_altitude(); //On enregistre l'altitude du point en mètres .
     fkmph = gps.f_speed_kmph(); // Vitesse en Km/h .
-    
+    currentPos();
     
     if(testInit==0){
     dist=0;
@@ -237,7 +238,7 @@ void GPSreader(){ //Récupère les données GPS et les stocke dans des variables
     dist = distance();
     distCumul = distCumul + dist;  
     }
-    Serial.println(distCumul);
+    //Serial.println(distCumul);
     //On enregistre les lat/lon dans une autre variable pour calculer la distance avec le point précédent ultérieurement
     oldlat=lat;
     oldlon=lon;
@@ -267,10 +268,21 @@ void GPSreader(){ //Récupère les données GPS et les stocke dans des variables
   return;
 }
 
+void currentPos(){
+  Serial.print(lat,DEC);
+  Serial.print(",");
+  Serial.print(lon,DEC);
+  Serial.print(",");
+  Serial.print(height,DEC);
+  Serial.print(",");
+  Serial.print(fkmph,DEC);
+  Serial.print(";\n");
+}
+
 float distance() { //Calcule la distance entre deux points successifs
 
-  Serial.println(oldlat);
-  Serial.println(oldlon);
+  //Serial.println(oldlat);
+  //Serial.println(oldlon);
   //Conversion des lat/lon en radian
   float latRad = lat * 0.017453293;
   float lonRad = lon * 0.017453293;
@@ -388,11 +400,11 @@ void ecritureSD(){
   
   if (theFile) {
       
-      theFile.print(lat);
+      theFile.print(lat,DEC);
       theFile.print(",");
-      theFile.print(lon);
+      theFile.print(lon,DEC);
       theFile.print(",");
-      theFile.print(height);
+      theFile.print(height,DEC);
       theFile.print(",");
       theFile.print(date);
       theFile.print(",");
@@ -408,26 +420,28 @@ void ecritureSD(){
       //Serial.println("C'est écrit !");
     } else {
       // impossible d'ouvrir/créer le fichier:
-      Serial.println("Erreur d'ouverture du fichier");
+      //Serial.println("Erreur d'ouverture du fichier");
   }
 }
 
 void lectureSD(){
   theFile = SD.open("point.txt");
   if (theFile) {
-    Serial.print("Latitude,Longitude,Altitude,Date,Heure,Point;\n");
+    //Serial.print("Latitude,Longitude,Altitude,Date,Heure,Point;\n");
     // lecture du fichier jusqu'à la fin:
+    Serial.println("#"); //Premier flag de début pour l'app android
     while (theFile.available()) {
-    Serial.write(theFile.read());
-  }
-  // Fermeture du fichier:
-  theFile.close();
-  //Suppression du fichier sur la carte SD
-  //SD.remove("point.txt");
+      Serial.write(theFile.read());
+    }
+    Serial.println("#"); //Dernier flag de début pour l'app andro
+    // Fermeture du fichier:
+    theFile.close();
+    //Suppression du fichier sur la carte SD
+    //SD.remove("point.txt");
   } 
   else {
   // Ouverture impossible:
-  affichEcran(" need a"," record");
+  affichEcran(" Need a"," record");
   }
 }
 

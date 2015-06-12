@@ -64,12 +64,6 @@ void setup(){
   testInit=0;
   dist=0;
   
-  //output = EEPROM.readFloat(address);
-  //Serial.print(output);
-  
- 
-
-  
   //Affichage de la batterie sur le lcd au démarrage
   lcd.begin(8,2);
   lcd.setCursor(0,1);
@@ -143,13 +137,24 @@ void selectButton(){
       lcd.print("1");
                   
       if(enregistrement==false){
+        distCumul = EEPROM.readFloat(address);
+        Serial.print(distCumul);
+        Serial.print("\n");
         enregistrement=true;
         affichEcran("  SAVE","   ON");
         delay(1000);        
       }else if (enregistrement==true){
         enregistrement=false;
+        EEPROM.updateFloat(address, distCumul);
         affichEcran("  SAVE","  OFF");
         delay(1000);
+        lcd.clear();
+        lcd.setCursor(0,0); 
+        lcd.print("Path / m"); 
+        lcd.setCursor(0,1); 
+        lcd.print(distCumul);
+        delay(1000);
+        
       }
   
   }else if(BPENState == HIGH && BP1State == LOW && BP0State == HIGH) { 
@@ -211,7 +216,18 @@ void selectButton(){
       if(enregistrement){
         affichEcran("  SAVE","STILL ON");
       }else{
-        affichEcran(" Upload","  Data");     
+        distCumul = EEPROM.readFloat(address);
+        affichEcran(" Upload","  Data");
+        delay(1000);
+        lcd.clear();
+        lcd.setCursor(0,0); 
+        lcd.print("Travel/m"); 
+        lcd.setCursor(0,1); 
+        lcd.print(distCumul);
+        delay(2000);        
+        distCumul=0;
+        EEPROM.updateFloat(address, distCumul);
+             
         lectureSD();
       }
   }
@@ -228,7 +244,7 @@ void GPSreader(){ //Récupère les données GPS et les stocke dans des variables
     gps.get_datetime(&date, &time); //la date et l'heure d'enregistrement du point (format UTC)
     height=gps.f_altitude(); //On enregistre l'altitude du point en mètres .
     fkmph = gps.f_speed_kmph(); // Vitesse en Km/h .
-    currentPos();
+    currentPos();//Affiche sur le port série la position actuelle
     
     if(testInit==0){
     dist=0;
@@ -243,12 +259,7 @@ void GPSreader(){ //Récupère les données GPS et les stocke dans des variables
     oldlat=lat;
     oldlon=lon;
     
-  //EEPROM.updateFloat(address, distCumul);
-  //output = EEPROM.readFloat(address);
-  //Serial.print(address);
-  //Serial.print("\t");
-  //Serial.print(output);
-  //Serial.println();
+  
     
     if(enregistrement){ 
        
@@ -406,6 +417,10 @@ void ecritureSD(){
       theFile.print(",");
       theFile.print(height,DEC);
       theFile.print(",");
+      theFile.print(dist);
+      theFile.print(",");
+      theFile.print(distCumul);
+      theFile.print(",");
       theFile.print(date);
       theFile.print(",");
       theFile.print(time);
@@ -434,10 +449,10 @@ void lectureSD(){
       Serial.write(theFile.read());
     }
     Serial.println("#"); //Dernier flag de début pour l'app andro
-    // Fermeture du fichier:
+    // Fermeture du fichier:z
     theFile.close();
     //Suppression du fichier sur la carte SD
-    //SD.remove("point.txt");
+    SD.remove("point.txt");
   } 
   else {
   // Ouverture impossible:

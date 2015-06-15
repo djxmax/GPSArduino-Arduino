@@ -138,8 +138,8 @@ void selectButton(){
                   
       if(enregistrement==false){
         distCumul = EEPROM.readFloat(address);
-        Serial.print(distCumul);
-        Serial.print("\n");
+        //Serial.print(distCumul);
+        //Serial.print("\n");
         enregistrement=true;
         affichEcran("  SAVE","   ON");
         delay(1000);        
